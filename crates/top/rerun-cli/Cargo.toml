@@ -100,6 +100,10 @@ lance = ["re_server/lance"]
 ## This only works on native, and only with `TELEMETRY_ENABLED` set.
 perf_telemetry = ["rerun/perf_telemetry"]
 
+## Enables video export functionality (requires FFmpeg at runtime).
+## Use with --video-export flag to export the viewer as an MP4 video.
+video_export = ["rerun/video_export"]
+
 ## Support serving a web viewer over HTTP.
 ##
 ## Enabling this inflates the binary size quite a bit, since it embeds the viewer wasm.

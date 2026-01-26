@@ -21,6 +21,23 @@ pub struct StartupOptions {
     #[cfg(not(target_arch = "wasm32"))]
     pub screenshot_to_path_then_quit: Option<std::path::PathBuf>,
 
+    /// Export the viewer as a video file and quit.
+    /// Requires FFmpeg to be installed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub video_export_path: Option<std::path::PathBuf>,
+
+    /// Frames per second for video export.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub video_export_fps: u32,
+
+    /// Duration in seconds for video export.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub video_export_duration: f32,
+
+    /// Playback speed multiplier for video export.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub video_export_speed: f32,
+
     /// A user has specifically requested the welcome screen be hidden.
     pub hide_welcome_screen: bool,
 
@@ -143,6 +160,18 @@ impl Default for StartupOptions {
 
             #[cfg(not(target_arch = "wasm32"))]
             screenshot_to_path_then_quit: None,
+
+            #[cfg(not(target_arch = "wasm32"))]
+            video_export_path: None,
+
+            #[cfg(not(target_arch = "wasm32"))]
+            video_export_fps: 30,
+
+            #[cfg(not(target_arch = "wasm32"))]
+            video_export_duration: 0.0, // 0 = full timeline
+
+            #[cfg(not(target_arch = "wasm32"))]
+            video_export_speed: 1.0,
 
             hide_welcome_screen: false,
 

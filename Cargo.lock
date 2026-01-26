@@ -10347,6 +10347,7 @@ dependencies = [
  "emath",
  "glam",
  "image",
+ "indicatif",
  "insta",
  "itertools 0.14.0",
  "jiff",

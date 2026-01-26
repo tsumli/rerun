@@ -34,6 +34,11 @@ pub mod viewer_test_utils;
 #[cfg(not(target_arch = "wasm32"))]
 mod loading;
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "video_export"))]
+pub mod video_exporter;
+#[cfg(all(not(target_arch = "wasm32"), feature = "video_export"))]
+pub use video_exporter::{FfmpegEncoder, VideoExportConfig, VideoExportError};
+
 /// Auto-generated blueprint-related types.
 ///
 /// They all implement the [`re_types_core::Component`] trait.

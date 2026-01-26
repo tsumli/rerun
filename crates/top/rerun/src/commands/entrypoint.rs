@@ -148,6 +148,27 @@ When persisted, the state will be stored at the following locations:
     #[clap(long)]
     screenshot_to: Option<std::path::PathBuf>,
 
+    /// Export the viewer as a video file and quit.
+    /// Renders headlessly at the specified FPS through the entire timeline.
+    /// Requires FFmpeg to be installed.
+    #[clap(long)]
+    video_export: Option<std::path::PathBuf>,
+
+    /// Frames per second for video export.
+    /// Only used with --video-export.
+    #[clap(long, default_value = "30")]
+    video_fps: u32,
+
+    /// Duration in seconds for video export (0 = full timeline).
+    /// Only used with --video-export.
+    #[clap(long, default_value = "0")]
+    video_duration: f32,
+
+    /// Playback speed multiplier for video export (e.g., 2.0 for 2x speed).
+    /// Only used with --video-export.
+    #[clap(long, default_value = "1.0")]
+    video_speed: f32,
+
     /// This will host a web-viewer over HTTP, and a gRPC server,
     /// unless one or more URIs are provided that can be viewed directly in the web viewer.
     ///
@@ -814,6 +835,30 @@ fn run_impl(
                 )
             }
         }
+    } else if args.video_export.is_some() {
+        // Video export: skip server detection, go directly to native viewer path
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "native_viewer")] {
+                start_native_viewer(
+                    &args,
+                    url_or_paths,
+                    _main_thread_token,
+                    _build_info,
+                    _call_source,
+                    tokio_runtime_handle,
+                    profiler,
+                    connection_registry,
+                    #[cfg(feature = "server")]
+                    server_addr,
+                    #[cfg(feature = "server")]
+                    server_options,
+                )
+            } else {
+                Err(anyhow::anyhow!(
+                    "Can't export video - rerun was compiled without the 'native_viewer' feature"
+                ))
+            }
+        }
     } else if args.connect.is_none() && is_another_server_already_running(server_addr) {
         connect_to_existing_server(url_or_paths, &connection_registry, server_addr)
     } else {
@@ -862,6 +907,32 @@ fn start_native_viewer(
     use crate::external::re_ui::{UICommand, UICommandSender as _};
 
     let startup_options = native_startup_options_from_args(args)?;
+
+    // Check if video export is requested
+    #[cfg(feature = "video_export")]
+    if let Some(video_export_path) = &startup_options.video_export_path {
+        let config = re_viewer::VideoExportConfig {
+            output_path: video_export_path.clone(),
+            width: startup_options
+                .resolution_in_points
+                .map(|r| r[0] as u32)
+                .unwrap_or(1920),
+            height: startup_options
+                .resolution_in_points
+                .map(|r| r[1] as u32)
+                .unwrap_or(1080),
+            fps: startup_options.video_export_fps,
+            duration_secs: startup_options.video_export_duration,
+            speed: startup_options.video_export_speed,
+        };
+
+        return re_viewer::video_exporter::export_video(
+            _main_thread_token,
+            url_or_paths,
+            config,
+        )
+        .map_err(|e| anyhow::anyhow!("{}", e));
+    }
 
     let connect = args.connect.is_some();
     let renderer = args.renderer.as_deref();
@@ -976,6 +1047,10 @@ fn native_startup_options_from_args(args: &Args) -> anyhow::Result<re_viewer::St
         persist_state: args.persist_state,
         is_in_notebook: false,
         screenshot_to_path_then_quit: args.screenshot_to.clone(),
+        video_export_path: args.video_export.clone(),
+        video_export_fps: args.video_fps,
+        video_export_duration: args.video_duration,
+        video_export_speed: args.video_speed,
 
         expect_data_soon: if args.expect_data_soon {
             Some(true)
@@ -1579,6 +1654,10 @@ fn record_cli_command_analytics(args: &Args) {
         window_size: _,
         renderer: _,
         video_decoder: _,
+        video_export: _,
+        video_fps: _,
+        video_duration: _,
+        video_speed: _,
         bind: _,
         memory_limit: _,
         server_memory_limit: _,
