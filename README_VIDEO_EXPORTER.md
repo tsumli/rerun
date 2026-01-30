@@ -1,107 +1,46 @@
 # Video Export Feature
 
-Export Rerun viewer recordings as MP4 video files using FFmpeg.
+Export Rerun viewer recordings as MP4 video files.
 
 ## Requirements
 
-- FFmpeg must be installed and available in your PATH
-- Build with the `video_export` feature flag
+- FFmpeg installed and in PATH
+- Build with `video_export` feature
 
-## Installation
-
-### FFmpeg Installation
-
-- **macOS:** `brew install ffmpeg`
-- **Ubuntu/Debian:** `sudo apt install ffmpeg`
-- **Fedora:** `sudo dnf install ffmpeg`
-- **Arch Linux:** `sudo pacman -S ffmpeg`
-- **Windows:** Download from https://ffmpeg.org/download.html
-
-## Usage
+## Quick Start
 
 ```bash
-# Build with video_export feature
-cargo build -p rerun-cli --no-default-features --features native_viewer,video_export
+# Build
+cargo build --release -p rerun-cli --features video_export --no-default-features
 
-# Basic usage - export full timeline
-cargo run -p rerun-cli --no-default-features --features native_viewer,video_export -- \
-  --video-export output.mp4 recording.rrd
+# Basic export
+./target/release/rerun recording.rrd --video-export output.mp4
 
-# With custom FPS
-cargo run -p rerun-cli --no-default-features --features native_viewer,video_export -- \
-  --video-export output.mp4 --video-fps 60 recording.rrd
+# With blueprint (applies show_labels, view settings, etc.)
+./target/release/rerun recording.rrd blueprint.rbl --video-export output.mp4
 
-# With specific duration (in seconds)
-cargo run -p rerun-cli --no-default-features --features native_viewer,video_export -- \
-  --video-export output.mp4 --video-duration 10 recording.rrd
-
-# With playback speed (e.g., 5x faster)
-cargo run -p rerun-cli --no-default-features --features native_viewer,video_export -- \
-  --video-export output.mp4 --video-speed 5.0 recording.rrd
-
-# Combine options
-cargo run -p rerun-cli --no-default-features --features native_viewer,video_export -- \
-  --video-export output.mp4 --video-fps 60 --video-speed 2.0 recording.rrd
+# With options
+./target/release/rerun recording.rrd blueprint.rbl \
+  --video-export output.mp4 \
+  --window-size 1920x1080 \
+  --video-fps 30 \
+  --video-duration 10 \
+  --video-speed 2.0
 ```
 
 ## CLI Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--video-export <PATH>` | - | Output path for the MP4 video file |
-| `--video-fps <FPS>` | 30 | Frames per second for the output video |
-| `--video-duration <SECS>` | 0 | Duration in seconds (0 = full timeline) |
-| `--video-speed <MULTIPLIER>` | 1.0 | Playback speed multiplier (e.g., 2.0 for 2x speed) |
+| `--video-export <PATH>` | - | Output MP4 path |
+| `--window-size <WxH>` | 1920x1080 | Resolution |
+| `--video-fps <FPS>` | 30 | Frames per second |
+| `--video-duration <SECS>` | 0 | Duration (0 = auto-detect) |
+| `--video-speed <X>` | 1.0 | Playback speed multiplier |
 
-## Output Format
+## Blueprint Support
 
-- **Resolution:** 1920x1080 (default)
-- **Codec:** H.264 (libx264)
-- **Pixel Format:** YUV420P
-- **Container:** MP4
-
-## Architecture
-
-The video export uses a background thread for FFmpeg encoding:
-
-```
-Main thread:    [render frame] -> [send to queue] -> [render next] -> ...
-                                        |
-Encoder thread:                   [write to FFmpeg] -> [encode] -> ...
-```
-
-This allows rendering to continue while encoding happens in parallel, improving performance.
-
-## Timeline Detection
-
-When `--video-duration 0` (default), the exporter automatically detects the timeline duration:
-
-1. Prefers time-based timelines (`DurationNs`, `TimestampNs`) over sequence timelines
-2. Uses the timeline with the longest duration
-3. Falls back to 10 seconds if no timeline is detected
-
-## Troubleshooting
-
-### FFmpeg not found
-
-Ensure FFmpeg is installed and in your PATH:
-```bash
-ffmpeg -version
-```
-
-### Video appears static
-
-Make sure your recording has time-varying data. The exporter advances through the timeline automatically.
-
-### Export is slow
-
-Video export renders each frame headlessly, which takes time. For faster exports:
-- Use `--video-speed` to cover more timeline in less video time
-- Reduce resolution (currently hardcoded to 1920x1080)
-- Use a recording with less complex visualizations
-
-## Implementation Details
-
-- **Source:** `crates/viewer/re_viewer/src/video_exporter.rs`
-- **Feature flag:** `video_export` in `re_viewer`, `rerun`, and `rerun-cli`
-- **Dependencies:** `egui_kittest` for headless rendering, `indicatif` for progress bars
+When a `.rbl` blueprint file is provided alongside the `.rrd` recording:
+- View layout and settings are applied
+- Component overrides (e.g., `show_labels`) are respected
+- `PlaybackSpeed` from blueprint is used if set (overrides `--video-speed`)

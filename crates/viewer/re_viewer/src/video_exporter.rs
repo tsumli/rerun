@@ -14,7 +14,9 @@ const FRAME_QUEUE_SIZE: usize = 8;
 use egui_kittest::Harness;
 use indicatif::{ProgressBar, ProgressStyle};
 use re_build_info::build_info;
-use re_viewer_context::TimeControlCommand;
+use re_chunk_store::LatestAtQuery;
+use re_sdk_types::blueprint::archetypes::TimePanelBlueprint;
+use re_viewer_context::{TimeControlCommand, blueprint_timeline, time_panel_blueprint_entity_path};
 
 use crate::{
     App, AppEnvironment, AsyncRuntimeHandle, MainThreadToken, StartupOptions,
@@ -289,6 +291,58 @@ pub fn export_video(
         return Err(VideoExportError::NoDataLoaded);
     }
 
+    // Try to activate any loaded blueprint for the recording's application
+    {
+        let app = harness.state_mut();
+        if let Some(store_hub) = &mut app.store_hub {
+            if let Some(recording) = store_hub.active_recording() {
+                let app_id = Some(recording.application_id().clone());
+                if let Some(app_id) = app_id {
+                    // Check if there's a default blueprint for this app
+                    if let Some(blueprint_id) = store_hub.default_blueprint_id_for_app(&app_id) {
+                        let blueprint_id = blueprint_id.clone();
+                        re_log::info!("Activating blueprint for app '{app_id}'");
+                        if let Err(err) =
+                            store_hub.set_cloned_blueprint_active_for_app(&blueprint_id)
+                        {
+                            re_log::warn!("Failed to activate blueprint: {err}");
+                        }
+                    } else {
+                        re_log::debug!("No default blueprint found for app '{app_id}'");
+                    }
+                }
+            }
+        }
+    }
+
+    // Run a few more frames to let the blueprint take effect
+    for _ in 0..30 {
+        harness.step();
+    }
+
+    // Try to read playback speed from the blueprint (if available)
+    let effective_speed: f32 = {
+        let app = harness.state();
+        let blueprint_speed = app.store_hub.as_ref().and_then(|store_hub| {
+            let blueprint = store_hub.active_blueprint()?;
+            let query = LatestAtQuery::latest(blueprint_timeline());
+            let (_, speed) = blueprint
+                .latest_at_component_quiet::<re_sdk_types::blueprint::components::PlaybackSpeed>(
+                    &time_panel_blueprint_entity_path(),
+                    &query,
+                    TimePanelBlueprint::descriptor_playback_speed().component,
+                )?;
+            Some(**speed as f32)
+        });
+
+        if let Some(bp_speed) = blueprint_speed {
+            re_log::info!("Using playback speed from blueprint: {bp_speed}x");
+            bp_speed
+        } else {
+            config.speed
+        }
+    };
+
     // Calculate duration - if 0, try to detect from timeline
     let duration_secs: f64 = if config.duration_secs <= 0.0 {
         // Try to get timeline range from the app by iterating over all timelines
@@ -356,8 +410,8 @@ pub fn export_video(
 
     // When using speed > 1.0, we cover more timeline time per video second
     // So total_frames stays the same (video duration), but we advance timeline faster
-    let total_frames: u64 = (duration_secs / config.speed as f64 * config.fps as f64).round() as u64;
-    let seconds_per_frame = config.speed as f64 / config.fps as f64;
+    let total_frames: u64 = (duration_secs / effective_speed as f64 * config.fps as f64).round() as u64;
+    let seconds_per_frame = effective_speed as f64 / config.fps as f64;
 
     // Move to the beginning of the timeline
     {
